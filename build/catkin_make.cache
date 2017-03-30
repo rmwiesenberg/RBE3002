@@ -1,0 +1,2 @@
+rmwiesenberg_lab2
+-DCATKIN_DEVEL_PREFIX=/home/ryan/RBE3002/devel -DCMAKE_INSTALL_PREFIX=/home/ryan/RBE3002/install -G Unix Makefiles
