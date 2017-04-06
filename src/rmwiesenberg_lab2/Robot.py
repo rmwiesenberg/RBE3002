@@ -18,12 +18,9 @@ class Robot(object):
     marg_ang = .1
     marg_pos = .1
 
-    """docstring for Robot."""
     def __init__(self):
-        rospy.init_node('rwiesenberg_lab2')
-
         self.pub = rospy.Publisher('cmd_vel_mux/input/teleop', Twist, None, queue_size=10)
-        self.bump_sub = rospy.Subscriber('mobile_base/events/bumper', BumperEvent, self.readBumper, queue_size=1)
+        #self.bump_sub = rospy.Subscriber('mobile_base/events/bumper', BumperEvent, self.readBumper, queue_size=1)
         self.goal_sub = rospy.Subscriber('move_base_simple/goal', PoseStamped, self.navToPose, queue_size=1)
         self.odom_sub = rospy.Subscriber('/odom', Odometry, self.readOdom)
         self.odom_lis = tf.TransformListener()
@@ -40,7 +37,7 @@ class Robot(object):
         self.kp_lin = 1
         self.kp_ang = 1
 
-        rospy.spin()
+        self.map = Map()
 
     #drive to a goal subscribed as /move_base_simple/goal
     def navToPose(self, goal):
@@ -114,6 +111,12 @@ class Robot(object):
         move_msg = Twist()
         move_msg.linear.x = linVel
         move_msg.angular.z = angVel
+
+        if(linVel < .1 and linVel != 0):
+            move_msg.linear.x = .1
+        if(angVel < .1 and angVel != 0):
+            move_msg.angular.z = .1
+
         self.pub.publish(move_msg)
         return True
 
