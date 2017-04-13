@@ -107,12 +107,3 @@ class Map(object):
 
 		self.newdata = True
 
-	def getCellPose(self, pose):
-		posn = min(self.cel.cells, key=lambda i: 
-			(abs(i.x-pose.position.x)+
-			abs(i.y-pose.position.y)+
-			abs(i.z-pose.position.z)))
-		act_pose = Pose()
-		act_pose.position = posn
-		act_pose.orientation = pose.orientation
-		return act_pose

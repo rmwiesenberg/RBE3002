@@ -18,9 +18,9 @@ class Robot(object):
 	max_ang = 1
 	max_lin = 2
 	min_ang = .1
-	min_lin = .1
+	min_lin = .05
 	marg_ang = .05
-	marg_pos = .01
+	marg_pos = .05
 
 	def __init__(self):
 		print "making robot"
@@ -40,10 +40,8 @@ class Robot(object):
 
 		self.desired = [0,0,0]
 
-		self.kp_lin = .5
-		self.kp_ang = .5
-
-		self.map = Map.Map()
+		self.kp_lin = 2
+		self.kp_ang = 2
 
 		self.gotInit = False
 
@@ -53,6 +51,8 @@ class Robot(object):
 		self.odom_sub = rospy.Subscriber('/odom', Odometry, self.readOdom)
 		self.odom_lis = tf.TransformListener()
 		self.odom_bro = tf.TransformBroadcaster()
+
+		print "made robot"
 
 	
 
@@ -81,7 +81,7 @@ class Robot(object):
 			self.desired[2] = self.desired[2] + 2*math.pi
 
 	def drive(self):
-		diff_ang = math.tan(self.desired[2] - self.theta)
+		diff_ang = math.tan((self.desired[2] - self.theta)/2)
 		diff_pos = abs(self.desired[0] - self.pose.position.x) +  abs(self.desired[1] - self.pose.position.y)
 		if(abs(diff_ang) > Robot.marg_ang):
 			amt = self.kp_ang*diff_ang
@@ -97,15 +97,11 @@ class Robot(object):
 				self.moveRobot(0, amt)
 			return False
 		elif(diff_pos > Robot.marg_pos):
-			amt = self.kp_ang*diff_ang
-			if amt < 0:
-				mod = -1
-			else:
-				mod = 1
+			amt = self.kp_lin*diff_pos
 			if abs(amt) < Robot.min_ang:
-				self.driveStraight(mod*Robot.min_lin)
+				self.driveStraight(Robot.min_lin)
 			elif abs(amt) > Robot.max_ang:
-				self.driveStraight(mod*Robot.max_lin)
+				self.driveStraight(Robot.max_lin)
 			else:
 				self.driveStraight(self.kp_lin*diff_pos)
 			return False
@@ -115,21 +111,6 @@ class Robot(object):
 
 	def driveStraight(self, speed):
 		self.moveRobot(speed, 0)
-
-	#This function works the same as rotate how ever it does not publish linear velocities.
-	def driveArc(self, radius, speed, angle):
-		w = speed/radius
-		v = speed
-		initAng = self.posn[2]
-		while(self.posn[2] < (initAng+angle)):
-			self.moveRobot(v,w)
-		self.stopRobot()
-		pass  # Delete this 'pass' once implemented
-
-	#Bumper Event Callback function
-	def readBumper(self, msg):
-		if (msg.state == 1):
-			self.driveArc(.1, .2, 1)
 
 	# Simple move and stop commands
 	def moveRobot(self, linVel, angVel):
@@ -154,7 +135,7 @@ class Robot(object):
 	def readOdom(self, msg):
 		if not self.gotInit:
 			try:
-				(trans, rot) = self.odom_lis.lookupTransform('map','odom', rospy.Time(0))
+				(trans, rot) = self.odom_lis.lookupTransform('map','base_footprint', rospy.Time(0))
 				self.initort = rot
 				self.initpos = trans
 
@@ -163,42 +144,37 @@ class Robot(object):
 
 				self.gotInit = True
 
-				print self.initpos
+				print self.initpos, self.inittheta
 			except:
 				print "map not ready"
 		else:
-			(trans, rot) = self.odom_lis.lookupTransform('odom','base_footprint', rospy.Time(0))
-			self.pose.orientation.x = rot[0] + self.initort[0]
-			self.pose.orientation.y = rot[1] + self.initort[1]
-			self.pose.orientation.z = rot[2] + self.initort[2]
-			self.pose.orientation.w = rot[3] + self.initort[3]
-			self.pose.position.x = trans[0]*math.cos(self.inittheta) - trans[1]*math.sin(self.inittheta) + self.initpos[0]
-			self.pose.position.y = trans[0]*math.sin(self.inittheta) + trans[1]*math.cos(self.inittheta) + self.initpos[1]
-			self.pose.position.z = trans[2] + self.initpos[2]
+			(trans, rot) = self.odom_lis.lookupTransform('map','base_footprint', rospy.Time(0))
+			self.pose.orientation.x = rot[0]
+			self.pose.orientation.y = rot[1]
+			self.pose.orientation.z = rot[2]
+			self.pose.orientation.w = rot[3]
+			self.pose.position.x = trans[0]
+			self.pose.position.y = trans[1]
+			self.pose.position.z = trans[2]
 
 			roll, pitch, yaw = euler_from_quaternion(rot)
-			self.theta = yaw + self.inittheta
+			self.theta = yaw 
 
 			if(self.theta < 0):
 				self.theta = self.theta+2*math.pi
 
 	def doAstar(self, msg):
-		start_pose = self.map.getCellPose(self.pose)
-		goal_pose = self.map.getCellPose(msg.pose)
-		astar = Astar.Astar(start_pose.position,self.map, goal_pose.position)
-		astar.run()
+		astar = Astar.Astar()
+		time.sleep(.1)
+		astar.run(self.pose.position, msg.pose.position)
 		ways = astar.getWaypoints()
 		print ways
 
-		# for w in reversed(ways):
-		# 	dPose = Pose()
-		# 	dPose.position = w
-		# 	dPose.orientation = self.pose.orientation
-		# 	while not self.navToPose(dPose):
-		# 		if(self.map.newdata):
-		# 			break
-		# 	if(self.map.newdata):
-		# 		self.stopRobot
-		# 		self.doAstar(msg)
-		# 		self.map.newdata = False
-		# 		break
+		for w in reversed(ways):
+			dPose = Pose()
+			dPose.position = w
+			dPose.orientation = self.pose.orientation
+			while not self.navToPose(dPose):
+				pass
+			self.stopRobot
+			self.doAstar(msg)

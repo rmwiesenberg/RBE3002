@@ -4,7 +4,7 @@ from tf.transformations import euler_from_quaternion
 from nav_msgs.msg import Odometry, Path, OccupancyGrid, MapMetaData, GridCells
 from geometry_msgs.msg import Twist, PoseStamped
 
-rad = .4
+rad = .21
 
 class Astar(object):
 	def __init__(self, start_posn, map, goal):
@@ -57,6 +57,7 @@ class Astar(object):
 
 			self.visit_pub.publish(self.pub)
 
+
 		self.best = self.toVisit[0]
 		print self.best.lineage()
 		print "DID IT FAM"
@@ -66,7 +67,7 @@ class Astar(object):
 
 	def isValid(self, posn):
 		for p in self.map.obs.cells:
-			if math.sqrt((p.x - posn.x)**2 + (p.y - posn.y)**2 + (p.z - posn.z)**2) < rad:
+			if math.sqrt((p.x - posn.x)**2 + (p.y - posn.y)**2 + (p.z - posn.z)**2) < (rad+self.map.meta.resolution/2):
 				return False
 		return True 
 
