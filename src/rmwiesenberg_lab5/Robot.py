@@ -1,11 +1,11 @@
 import rospy, tf, numpy, math, time
-import Astar, Map
+import Astar, Map, Wavefront
 import geometry_msgs
 from std_msgs.msg import String
-from geometry_msgs.msg import Twist, PoseStamped, Point, Quaternion, Pose
+from geometry_msgs.msg import Twist, PoseStamped, Point, Quaternion, Pose, PointStamped
 from nav_msgs.msg import Odometry
 from kobuki_msgs.msg import BumperEvent
-from tf.transformations import euler_from_quaternion
+from tf.transformations import euler_from_quaternion, quaternion_from_euler
 
 class Robot(object):
 	wheel_rad = 3.5/100
@@ -15,8 +15,8 @@ class Robot(object):
 	stop_msg.linear.x = 0
 	stop_msg.angular.z = 0
 
-	max_ang = 1
-	max_lin = 2
+	max_ang = .5
+	max_lin = .2
 	min_ang = .05
 	min_lin = .05
 	marg_ang = .05
@@ -40,8 +40,8 @@ class Robot(object):
 
 		self.desired = [0,0,0]
 
-		self.kp_lin = .5
-		self.kp_ang = .5
+		self.kp_lin = .25
+		self.kp_ang = .25
 
 		self.gotInit = False
 
@@ -50,11 +50,6 @@ class Robot(object):
 		self.odom_sub = rospy.Subscriber('/odom', Odometry, self.readOdom)
 		self.odom_lis = tf.TransformListener()
 		self.odom_bro = tf.TransformBroadcaster()
-
-		self.doWavefront()
-
-		self.goal_sub = rospy.Subscriber('move_base_simple/goal', PoseStamped, self.doAstar, queue_size=1)
-
 		print "made robot"
 
 	
@@ -140,9 +135,8 @@ class Robot(object):
 				roll, pitch, yaw = euler_from_quaternion(rot)
 				self.inittheta = yaw
 
+				print "map ready"
 				self.gotInit = True
-
-				print self.initpos, self.inittheta
 			except:
 				print "map not ready"
 		else:
@@ -161,23 +155,73 @@ class Robot(object):
 			if(self.theta < 0):
 				self.theta = self.theta+2*math.pi
 
+	def doWavefront(self, msg):
+		print("Will do!")
+		wave = Wavefront.Wavefront()
+		self.stopRobot()
+		unk = False
+
+		try:
+			unk = wave.run(self.pose.position)
+		except:
+			self.stopRobot()
+			print("Explored!")
+			self.goal_sub = rospy.Subscriber('move_base_simple/goal', PoseStamped, self.doAstar, queue_size=1)
+			return
+
+		astar = Astar.Astar()
+		time.sleep(.2)
+		astar.run(self.pose.position, unk)
+		ways = astar.getWaypoints()
+
+		for w in reversed(ways):
+			dPose = Pose()
+			dPose.position = w
+			if not len(ways) > 2:
+				rot = [0,0,0,0]
+				rot[0] = self.pose.orientation.x
+				rot[1] = self.pose.orientation.y
+				rot[2] = self.pose.orientation.z
+				rot[3] = self.pose.orientation.w
+				roll, pitch, yaw = euler_from_quaternion(rot)
+				yaw = yaw + (math.pi/4)
+				rot = quaternion_from_euler(roll, pitch, yaw)
+				dPose.orientation.x = rot[0]
+				dPose.orientation.y = rot[1]
+				dPose.orientation.z = rot[2]
+				dPose.orientation.w = rot[3]
+			else:
+				dPose.orientation = self.pose.orientation
+			while not self.navToPose(dPose):
+				pass
+			self.stopRobot
+			self.doWavefront(msg)
+			break
+
 	def doAstar(self, msg):
 		astar = Astar.Astar()
 		time.sleep(.2)
 		astar.run(self.pose.position, msg.pose.position)
 		ways = astar.getWaypoints()
-		print ways
 
 		for w in reversed(ways):
 			dPose = Pose()
 			dPose.position = w
-			dPose.orientation = self.pose.orientation
+			rot = [0,0,0,0]
+			rot[0] = self.pose.orientation.x
+			rot[1] = self.pose.orientation.y
+			rot[2] = self.pose.orientation.z
+			rot[3] = self.pose.orientation.w
+			roll, pitch, yaw = euler_from_quaternion(rot)
+			yaw = yaw + math.pi
+			rot = quaternion_from_euler(roll, pitch, yaw)
+			dPose.orientation.x = rot[0]
+			dPose.orientation.y = rot[1]
+			dPose.orientation.z = rot[2]
+			dPose.orientation.w = rot[3]
 			while not self.navToPose(dPose):
 				pass
 			self.stopRobot
 			if len(ways) > 2:
 				self.doAstar(msg)
 			break
-
-	def doWavefront(self):
-		pass
