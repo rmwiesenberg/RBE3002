@@ -5,25 +5,32 @@ from tf.transformations import euler_from_quaternion
 from nav_msgs.msg import Odometry, Path, OccupancyGrid, MapMetaData, GridCells
 from geometry_msgs.msg import Twist, PoseStamped
 
+# A* is the method of finding the optimal path from one position to another
+# A* expands its own obstacles and begins at the robot's location
+# Resolution - define the desired A* resolution
+# Robot - robot diameter for obstacle expansion
 
+# map_sub - map subsciber
+# *_pub - grid cell publishers for pretty GUI
 
 class Astar(object):
 	def __init__(self):
 		
-		self.resolution = .1 	#yolo
-		self.robot = .22 		#robot circumference should be a-star grd size
+		self.resolution = .1 	
+		self.robot = .22 
 
 		self.map_sub = rospy.Subscriber("map", OccupancyGrid, self.mapstuff, queue_size=1)
 		self.visit_pub = rospy.Publisher("move_base/local_costmap/visit", GridCells, queue_size=1)
 		self.waypt_pub = rospy.Publisher("move_base/local_costmap/waypt", GridCells, queue_size=1)
 
-
+	# does A*
 	def run(self, start_posn, goal):
 		self.start_posn = start_posn
 		self.toVisit = [Node.Node(start_posn, None, 0)]
 		self.visited = []
 		self.goal = goal
 
+		# define grid cells to be published 
 		self.pub = GridCells()
 		self.pub.header = self.map.header
 		self.pub.cell_width = self.resolution
@@ -34,7 +41,8 @@ class Astar(object):
 		self.way.cell_width = self.resolution
 		self.way.cell_height = self.resolution
 
-		#checks that 
+		# check if nodes are valid and have not been visited 
+		# expands the remaining
 		while not self.toVisit[0].contains(self.goal, self.robot):
 			going = self.toVisit.pop(0)
 			if self.isVisit(going.posn):
@@ -64,9 +72,11 @@ class Astar(object):
 		print self.best.lineage()
 		print "DID IT FAM"
 
+	# euclidean distance from one node to another
 	def globaldist(self, cur, goal):
 		return math.sqrt((cur.x-goal.x)**2 + (cur.y-goal.y)**2 + (cur.z-goal.z)**2)
 
+	# checks if position is an obstacle
 	def isValid(self, posn):
 		space = self.robot+self.resolution/2
 		for x in np.arange(posn.x - space, posn.x + space , self.map.info.resolution):
@@ -83,12 +93,14 @@ class Astar(object):
 						return False
 		return True 
 
+	# checks if the position has been visited by A*
 	def isVisit(self, posn):
 		for p in self.visited:
 			if posn.x >= p.x and posn.x < (p.x + self.resolution) and posn.y >= p.y and posn.y < (p.y + self.resolution):
 				return True
 		return False
 
+	# get waypoints from the best list after A* completes
 	def getWaypoints(self):
 		points = self.best.points()
 		posn = points[0]
@@ -105,15 +117,6 @@ class Astar(object):
 
 		return ways
 
+	# pass the map in to the object
 	def mapstuff(self, msg):
 		self.map = msg
-
-	def getCellPose(self, pose):
-		posn = min(self.cel.cells, key=lambda i: 
-			(abs(i.x-pose.position.x)+
-			abs(i.y-pose.position.y)+
-			abs(i.z-pose.position.z)))
-		act_pose = Pose()
-		act_pose.position = posn
-		act_pose.orientation = pose.orientation
-		return act_pose

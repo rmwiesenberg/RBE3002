@@ -5,27 +5,37 @@ from tf.transformations import euler_from_quaternion
 from nav_msgs.msg import Odometry, Path, OccupancyGrid, MapMetaData, GridCells
 from geometry_msgs.msg import Twist, PoseStamped
 
+# Wavefront looks for unknown areas and then returns that point to be used in A*
+# A* expands its own obstacles and does not continue exploration there
+# Resolution - define the desired wavefront resolution
+# Robot - robot diameter for obstacle expansion
+
+# map_sub - map subsciber
+# *_pub - grid cell publishers for pretty GUI
 
 class Wavefront(object):
 	def __init__(self):
 		
-		self.resolution = .1 	#yolo
-		self.robot = .22 		#robot circumference should be a-star grd size
+		self.resolution = .1
+		self.robot = .22
 
 		self.map_sub = rospy.Subscriber("map", OccupancyGrid, self.mapstuff, queue_size=1)
 		self.wave_pub = rospy.Publisher("move_base/local_costmap/wave", GridCells, queue_size=1)
 
-
+	# does wavefront
 	def run(self, start_posn):
 		self.start_posn = start_posn
 		self.toVisit = [Node.Node(start_posn, None, 0)]
 		self.visited = []
 
+		# define grid cells to be published
 		self.wave = GridCells()
 		self.wave.header = self.map.header
 		self.wave.cell_width = self.resolution
 		self.wave.cell_height = self.resolution 
 
+		# check if nodes are valid and have not been visited 
+		# expands the remaining
 		while 1:
 			going = self.toVisit.pop(0)
 			if self.isVisit(going.posn):
@@ -53,6 +63,7 @@ class Wavefront(object):
 					self.wave.cells.append(n.posn)
 			self.wave_pub.publish(self.wave)
 
+	# checks if position is an obstacle
 	def isValid(self, posn):
 		space = self.robot+self.resolution/2
 		for x in np.arange(posn.x - space, posn.x + space , self.map.info.resolution):
@@ -69,12 +80,7 @@ class Wavefront(object):
 						return False
 		return True 
 
-	def isVisit(self, posn):
-		for p in self.visited:
-			if posn.x >= p.x and posn.x < (p.x + self.resolution) and posn.y >= p.y and posn.y < (p.y + self.resolution):
-				return True
-		return False
-
+	# checks if position is not an unknown
 	def isKno(self, posn):
 		space = self.robot+self.resolution/2
 		for x in np.arange(posn.x - space, posn.x + space , self.map.info.resolution):
@@ -91,15 +97,13 @@ class Wavefront(object):
 						return False
 		return True 
 
+	# checks if the position has been visited by A*
+	def isVisit(self, posn):
+		for p in self.visited:
+			if posn.x >= p.x and posn.x < (p.x + self.resolution) and posn.y >= p.y and posn.y < (p.y + self.resolution):
+				return True
+		return False
+
+	# pass the map in to the object
 	def mapstuff(self, msg):
 		self.map = msg
-
-	def getCellPose(self, pose):
-		posn = min(self.cel.cells, key=lambda i: 
-			(abs(i.x-pose.position.x)+
-			abs(i.y-pose.position.y)+
-			abs(i.z-pose.position.z)))
-		act_pose = Pose()
-		act_pose.position = posn
-		act_pose.orientation = pose.orientation
-		return act_pose
